@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { HttpApiService } from '../../core/http/http-api.service';
-import * as extractUrls from 'extract-urls';
-import { IGoodRoutes } from './interfaces/good-route.interface';
+import { getFromBetween } from '../../core/functions/get-from-between';
+import { isURL } from 'class-validator';
 
 @Injectable()
 export class ParseUrlService {
@@ -10,49 +10,42 @@ export class ParseUrlService {
   public async parseUrl(url: string) {
     const data = await this.httpService.parseUrl(url);
 
-    const urls: string[] = extractUrls(data);
+    const jsTags = getFromBetween.get(data, '<script', '>').filter(Boolean);
 
-    const firstFilter = urls.filter((u) => this.isNeededRoute(u));
+    const cssTags = getFromBetween
+      .get(data, '<link', '>')
+      .filter((str) => str.includes('css'));
 
-    const cssJsFiles = await Promise.allSettled<IGoodRoutes>(
-      firstFilter.map(async (url) => {
-        const contenType = await this.httpService.getFileContentType(url);
-
-        if (this.isNeededRoute(contenType)) {
-          return {
-            url,
-            contenType,
-          };
-        }
-
-        throw 'Not Found!';
-      }),
-    );
-
-    const res = {
-      css: [],
-      js: [],
+    return {
+      css: this.processFiles(cssTags, 'href'),
+      js: this.processFiles(jsTags, 'src'),
     };
+  }
 
-    for (let i = 0; i < cssJsFiles.length; i++) {
-      const row = cssJsFiles[i];
-      if (row.status === 'fulfilled') {
-        if (row.value.contenType.includes('css')) {
-          res.css.push(row.value.url);
+  protected processFiles(
+    tags: string[],
+    searchValue: 'src' | 'href',
+  ): string[] {
+    const res: string[] = [];
 
-          continue;
-        }
+    for (let i = 0; i < tags.length; i++) {
+      const tag = tags[i];
 
-        res.js.push(row.value.url);
+      const file =
+        getFromBetween.get(tag, `${searchValue}="`, '"')[0] ??
+        getFromBetween.get(tag, `${searchValue}='`, `'`)[0];
+
+      if (isURL(file)) {
+        res.push(file);
+
+        continue;
+      }
+
+      if (file) {
+        res.push(file.split('/').pop());
       }
     }
 
     return res;
-  }
-
-  protected isNeededRoute(str: string): boolean {
-    return (
-      str.includes('css') || str.includes('javascript') || str.includes('js')
-    );
   }
 }

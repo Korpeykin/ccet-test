@@ -26,25 +26,4 @@ export class HttpApiService {
 
     return data;
   }
-
-  public async getFileContentType(url: string) {
-    const res = await firstValueFrom(
-      this.httpService
-        .get<string>(url, {
-          timeout: 5000,
-          headers: {
-            'Accept-Encoding': 'gzip,deflate,compress',
-          },
-        })
-        .pipe(
-          catchError((e: AxiosError) => {
-            throw new HttpException(e.message ?? 'Fetch files error', 500, {
-              cause: new Error(e.message),
-            });
-          }),
-        ),
-    );
-
-    return res.headers['content-type'];
-  }
 }
